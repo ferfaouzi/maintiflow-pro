@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/.env
+deploy/.env
+backend/storage/
+backend/storage.before-restore-*/
+backend/backups/
+deploy/backups/
+backend/demo_output/
+backend/demo_credentials.txt

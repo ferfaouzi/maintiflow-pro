@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traduction arabe initiale (à faire relire par un locuteur natif avant publication). -->
+<resources>
+    <string name="login_title">تسجيل الدخول</string>
+    <string name="server_url">عنوان الخادم (https://…)</string>
+    <string name="username">اسم المستخدم</string>
+    <string name="password">كلمة المرور</string>
+    <string name="login">دخول</string>
+    <string name="change_password_title">يجب تغيير كلمة المرور</string>
+    <string name="current_password">كلمة المرور الحالية</string>
+    <string name="new_password">كلمة المرور الجديدة (8 أحرف، حروف وأرقام)</string>
+    <string name="validate">تأكيد</string>
+    <string name="new_ticket">طلب تدخل جديد</string>
+    <string name="home_priority">الطلبات ذات الأولوية</string>
+    <string name="home_mine">طلباتي الجارية</string>
+    <string name="home_empty">لا توجد طلبات مفتوحة</string>
+    <string name="offline_banner">غير متصل – البيانات من الذاكرة المؤقتة</string>
+    <string name="pending_sync">%1$d طلب في انتظار الإرسال</string>
+    <string name="search">بحث</string>
+    <string name="settings">الإعدادات</string>
+    <string name="admin">الإدارة</string>
+    <string name="refresh">تحديث</string>
+    <string name="late">متأخر</string>
+    <string name="recurring">عطل متكرر</string>
+    <string name="production_stopped">الإنتاج متوقف</string>
+    <string name="step_line">1. الخط</string>
+    <string name="step_machine">2. الآلة</string>
+    <string name="step_category">3. نوع العطل</string>
+    <string name="step_description">4. وصف المشكلة</string>
+    <string name="description_hint">صف ما تلاحظه (صوت، تسرب، إنذار…)</string>
+    <string name="production_is_stopped">الإنتاج متوقف</string>
+    <string name="add_photo">إضافة صورة</string>
+    <string name="photos_count">%1$d صورة</string>
+    <string name="send">إرسال الطلب</string>
+    <string name="saved_offline">لا توجد شبكة: تم حفظ الطلب وسيُرسل تلقائيًا.</string>
+    <string name="created">تم إرسال الطلب %1$s إلى الصيانة</string>
+    <string name="priority">الأولوية</string>
+    <string name="save">حفظ</string>
+    <string name="cancel">إلغاء</string>
+    <string name="confirm">تأكيد</string>
+    <string name="logout">تسجيل الخروج</string>
+    <string name="error_network">تعذر الاتصال بالخادم</string>
+    <string name="error_session">انتهت الجلسة، يرجى تسجيل الدخول</string>
+</resources>

@@ -1,0 +1,49 @@
+# Installation pilote sur un serveur du réseau local de l'usine (aucune exposition Internet requise).
+#   cp deploy/.env.example deploy/.env  && éditer les secrets
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maintiflow
+      POSTGRES_USER: maintiflow
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD manquant}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maintiflow"]
+      interval: 10s
+      retries: 5
+
+  api:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      APP_ENV: ${APP_ENV:-pilot}
+      DATABASE_URL: postgresql+psycopg://maintiflow:${DB_PASSWORD}@db:5432/maintiflow
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant}
+      ACCESS_TOKEN_HOURS: ${ACCESS_TOKEN_HOURS:-12}
+    volumes:
+      - storage:/data/storage
+    expose: ["8000"]
+
+  # Terminaison TLS. "tls internal" : Caddy crée une autorité de certification locale ;
+  # son certificat racine (volume caddy_data, pki/authorities/local/root.crt) est à installer sur les terminaux.
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["443:443"]
+    environment:
+      SERVER_NAME: ${SERVER_NAME:-maintiflow.usine.local}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  pgdata:
+  storage:
+  caddy_data:

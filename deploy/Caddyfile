@@ -1,0 +1,13 @@
+{$SERVER_NAME} {
+	tls internal
+	encode gzip
+	request_body {
+		max_size 10MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options DENY
+		-Server
+	}
+	reverse_proxy api:8000
+}
