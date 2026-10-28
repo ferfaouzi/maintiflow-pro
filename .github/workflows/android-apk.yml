@@ -8,23 +8,43 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - uses: gradle/actions/setup-gradle@v4
+      - name: SDK Android
+        run: |
+          set -x
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKM=$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager | head -1)
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
       - name: Tests unitaires + APK debug
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon testDebugUnitTest assembleDebug
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee ../build.log
+      - name: Rapport d'erreur (issue)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Échec de la compilation (run ${GITHUB_RUN_NUMBER})"
+            echo '```'
+            if [ -f build.log ]; then grep -E "^e: |error:|FAILURE|What went wrong|^> " build.log | head -120; echo ---; tail -60 build.log; fi
+            echo '```'
+          } > report.md
+          gh issue create --title "Build APK en échec #${GITHUB_RUN_NUMBER}" --body-file report.md
       - uses: actions/upload-artifact@v4
         with:
           name: maintiflow-debug-apk
