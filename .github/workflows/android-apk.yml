@@ -1,0 +1,39 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Tests unitaires + APK debug
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maintiflow-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publier l'APK dans une release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="apk-${GITHUB_RUN_NUMBER}"
+          cp android/app/build/outputs/apk/debug/app-debug.apk MaintiFlowPro-debug.apk
+          gh release create "$TAG" MaintiFlowPro-debug.apk --title "APK de test ${TAG}" \
+            --notes "APK debug compilé automatiquement (données de démo fictives). Non signé pour la publication." --prerelease
