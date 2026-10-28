@@ -318,14 +318,14 @@ object Schema {
      * Crée le schéma si la base est vide. Idempotent. La version est tenue dans la table mf_meta
      * (PRAGMA user_version est réservé à l'outil d'ouverture SQLite d'Android).
      */
-    fun migrate(sql: Sql) {
+    fun migrate(sql: Sql, target: Int = VERSION) {
         sql.exec("CREATE TABLE IF NOT EXISTS mf_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         val current = sql.one("SELECT value FROM mf_meta WHERE key='schema_version'")?.str("value")?.toInt() ?: 0
-        if (current >= VERSION) return
+        if (current >= target) return
         sql.transaction {
             if (current < 1) (TABLES + TRIGGERS_V1).forEach { sql.exec(it) }
-            if (current < 2) V2.forEach { sql.exec(it) }
-            sql.exec("INSERT OR REPLACE INTO mf_meta(key, value) VALUES ('schema_version', ?)", VERSION.toString())
+            if (current < 2 && target >= 2) V2.forEach { sql.exec(it) }
+            sql.exec("INSERT OR REPLACE INTO mf_meta(key, value) VALUES ('schema_version', ?)", target.toString())
         }
     }
 }

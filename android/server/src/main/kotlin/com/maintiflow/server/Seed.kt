@@ -20,18 +20,33 @@ object Seed {
             "L3-TEST-01" to "Banc de test électrique 1", "L3-TEST-02" to "Banc de test électrique 2",
             "L3-VISION-01" to "Poste de contrôle vision")),
     )
+    /** Code, nom, priorité proposée, validation Qualité obligatoire, causes possibles. */
+    private class Cat(val code: String, val name: String, val prio: String, val quality: Boolean, val causes: List<String>)
+
     private val CATEGORIES = listOf(
-        Triple("MECA", "Mécanique", "NORMALE"), Triple("ELEC", "Électrique", "HAUTE"),
-        Triple("PNEU", "Pneumatique", "NORMALE"), Triple("AUTO", "Automatisme / capteur", "HAUTE"),
-        Triple("OUTIL", "Outillage / applicateur", "NORMALE"), Triple("QUAL", "Défaut qualité produit", "HAUTE"),
-        Triple("SECU", "Sécurité machine", "CRITIQUE"), Triple("AUTRE", "Autre", "BASSE"),
+        Cat("MECA", "Mécanique", "NORMALE", false, listOf("Usure", "Casse", "Desserrage", "Défaut de lubrification")),
+        Cat("ELEC", "Électrique", "HAUTE", false, listOf("Câble endommagé", "Fusible / disjoncteur", "Connecteur défectueux")),
+        Cat("PNEU", "Pneumatique", "NORMALE", false, listOf("Fuite d'air", "Vérin défectueux", "Pression insuffisante")),
+        Cat("AUTO", "Automatisme / capteur", "HAUTE", false, listOf("Capteur défectueux", "Capteur déréglé", "Programme automate")),
+        Cat("OUTIL", "Outillage / applicateur", "NORMALE", true, listOf("Applicateur usé", "Réglage hauteur de sertissage", "Lame de coupe usée")),
+        Cat("QUAL", "Défaut qualité produit", "HAUTE", true, listOf("Sertissage non conforme", "Longueur de coupe hors tolérance", "Mauvais câble")),
+        Cat("SECU", "Sécurité machine", "CRITIQUE", true, listOf("Barrière immatérielle", "Arrêt d'urgence", "Carter de protection")),
+        Cat("AUTRE", "Autre", "BASSE", false, emptyList()),
     )
+
+    /** Comptes fictifs : matricule, prénom, nom, rôle, lignes attribuées (codes). */
     val DEMO_USERS = listOf(
-        Triple("chef.l1", "Amine Chef L1 (fictif)", Role.CHEF_EQUIPE),
-        Triple("chef.l2", "Nadia Chef L2 (fictif)", Role.CHEF_EQUIPE),
-        Triple("tech.1", "Karim Technicien (fictif)", Role.TECHNICIEN),
-        Triple("tech.2", "Youssef Technicien (fictif)", Role.TECHNICIEN),
-        Triple("resp.maint", "Leila Responsable Maintenance (fictif)", Role.RESPONSABLE),
+        listOf("op.l1", "Sami", "Opérateur L1 (fictif)", Role.OPERATEUR, "L1"),
+        listOf("op.l2", "Rania", "Opératrice L2 (fictif)", Role.OPERATEUR, "L2"),
+        listOf("cl.l1", "Hichem", "Chef de ligne L1 (fictif)", Role.CHEF_LIGNE, "L1"),
+        listOf("chef.l1", "Amine", "Chef d'équipe L1 (fictif)", Role.CHEF_EQUIPE, ""),
+        listOf("chef.l2", "Nadia", "Chef d'équipe L2 (fictif)", Role.CHEF_EQUIPE, ""),
+        listOf("tech.1", "Karim", "Maintenancier (fictif)", Role.MAINTENANCIER, ""),
+        listOf("tech.2", "Youssef", "Maintenancier (fictif)", Role.MAINTENANCIER, ""),
+        listOf("methode.1", "Ines", "Méthode (fictif)", Role.METHODE, ""),
+        listOf("qualite.1", "Mehdi", "Qualité (fictif)", Role.QUALITE, ""),
+        listOf("logistique.1", "Salma", "Logistique (fictif)", Role.LOGISTIQUE, ""),
+        listOf("resp.maint", "Leila", "Responsable maintenance (fictif)", Role.RESPONSABLE, ""),
     )
 
     fun isInitialized(sql: Sql): Boolean {
@@ -40,8 +55,8 @@ object Seed {
     }
 
     /**
-     * Crée le site et le compte « admin ». Avec [withDemo], ajoute aussi les lignes, machines, types de
-     * pannes et comptes fictifs (chef.l1, tech.1…), avec le même mot de passe que l'administrateur.
+     * Crée le site et le compte « admin ». Avec [withDemo], ajoute aussi une usine fictive complète (lignes,
+     * postes, machines, références câble, catégories et causes) et un compte fictif par rôle (op.l1, chef.l1, tech.1…), avec le même mot de passe que l'administrateur.
      */
     fun initialize(sql: Sql, adminPassword: String, company: String?, withDemo: Boolean, iterations: Int, now: Long) {
         Security.checkPasswordPolicy(adminPassword)
@@ -55,27 +70,51 @@ object Seed {
                 SettingsStore(sql).set(siteId, "company_display_name", JsonPrimitive(it.take(120)))
             }
             val hash = Security.hashPassword(adminPassword, iterations)
-            val users = mutableListOf(Triple("admin", "Administrateur", Role.ADMIN))
+            val users = mutableListOf(listOf("admin", "", "Administrateur", Role.ADMIN, ""))
+            val lineIds = HashMap<String, Long>()
             if (withDemo) {
                 users += DEMO_USERS
                 for ((code, name, machines) in LINES) {
                     sql.exec("INSERT INTO lines(site_id, code, name) VALUES (?,?,?)", siteId, code, name)
                     val lineId = sql.lastInsertId()
-                    machines.forEach { (mc, mn) ->
-                        sql.exec("INSERT INTO machines(line_id, code, name, qr_token) VALUES (?,?,?,?)",
-                            lineId, mc, mn, UUID.randomUUID().toString())
+                    lineIds[code] = lineId
+                    val postes = listOf("A", "B", "C").map { p ->
+                        sql.exec("INSERT INTO postes(line_id, code, name) VALUES (?,?,?)", lineId, "$code-$p", "Poste $p")
+                        sql.lastInsertId()
+                    }
+                    machines.forEachIndexed { i, (mc, mn) ->
+                        sql.exec("INSERT INTO machines(line_id, poste_id, code, name, qr_token) VALUES (?,?,?,?,?)",
+                            lineId, postes[minOf(i, postes.size - 1)], mc, mn, UUID.randomUUID().toString())
+                        if (mc.contains("SERT")) {
+                            sql.exec("INSERT INTO tools(site_id, machine_id, code, name) VALUES (?,?,?,?)",
+                                siteId, sql.lastInsertId(), "APP-$mc", "Applicateur de sertissage $mc")
+                        }
                     }
                 }
-                CATEGORIES.forEach { (code, name, prio) ->
-                    sql.exec("INSERT INTO failure_categories(site_id, code, name, default_priority) VALUES (?,?,?,?)",
-                        siteId, code, name, prio)
+                for (c in CATEGORIES) {
+                    sql.exec("INSERT INTO failure_categories(site_id, code, name, default_priority, requires_quality) VALUES (?,?,?,?,?)",
+                        siteId, c.code, c.name, c.prio, c.quality)
+                    val catId = sql.lastInsertId()
+                    c.causes.forEach { sql.exec("INSERT INTO failure_causes(category_id, name) VALUES (?,?)", catId, it) }
+                }
+                (1..6).forEach {
+                    sql.exec("INSERT INTO cable_refs(site_id, code, name) VALUES (?,?,?)",
+                        siteId, "CBL-DEMO-${it.toString().padStart(4, '0')}", "Câble fictif n° $it")
+                }
+                listOf("CORR" to "Corrective", "REGL" to "Réglage", "OUTIL" to "Changement d'outil",
+                    "ELEC" to "Dépannage électrique", "ANALYSE" to "Analyse Méthode").forEach { (code, name) ->
+                    sql.exec("INSERT INTO intervention_types(site_id, code, name) VALUES (?,?,?)", siteId, code, name)
                 }
             }
-            users.forEach { (username, fullName, role) ->
+            users.forEach { (username, first, last, role, lines) ->
                 sql.exec(
-                    "INSERT INTO users(site_id, username, full_name, role, password_hash, must_change_password, created_at) " +
-                        "VALUES (?,?,?,?,?,0,?)", siteId, username, fullName, role, hash, now,
+                    "INSERT INTO users(site_id, username, first_name, last_name, full_name, role, password_hash, must_change_password, created_at) " +
+                        "VALUES (?,?,?,?,?,?,?,0,?)", siteId, username, first, last, User.displayName(first, last), role, hash, now,
                 )
+                val userId = sql.lastInsertId()
+                lines.split(',').filter { it.isNotBlank() }.forEach {
+                    sql.exec("INSERT INTO user_lines(user_id, line_id) VALUES (?,?)", userId, lineIds[it])
+                }
             }
             sql.exec(
                 "INSERT INTO audit_log(at, username, action, entity, detail) VALUES (?,?,?,?,?)",

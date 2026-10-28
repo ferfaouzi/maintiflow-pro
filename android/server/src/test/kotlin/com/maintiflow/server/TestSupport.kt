@@ -26,40 +26,61 @@ const val PWD = "Test1234pass"
 val TEXT_PDF = PdfRenderer { doc -> ("%PDF-1.4\n" + PdfBuilder.toText(doc)).toByteArray() }
 
 /**
- * Serveur de test : même jeu de données que backend/tests/conftest.py (deux sites, 7 comptes),
- * servi en HTTP réel sur un port local libre.
+ * Serveur de test servi en HTTP réel sur un port local libre. Site 1 : lignes L1 (machines M1, M2, poste L1-A)
+ * et L2 (machine M3) ; site 2 : ligne X1. Un compte par rôle, plus quelques doublons pour les règles d'affectation.
  */
 class TestEnv(
     val clock: () -> Long = { System.currentTimeMillis() },
     pdf: PdfRenderer = TEXT_PDF,
+    backup: (() -> Pair<String, ByteArray>)? = null,
+    val sql: JdbcSql = JdbcSql(),
+    fixtures: Boolean = true,
 ) : AutoCloseable {
-    val sql = JdbcSql()
     val storage = Files.createTempDirectory("mf-test-").toFile()
-    val server = MaintiFlowServer(sql, ServerConfig(storage, pdf, passwordIterations = 1000, clock = clock))
+    val server = MaintiFlowServer(sql, ServerConfig(storage, pdf, passwordIterations = 1000, clock = clock, backup = backup))
     private val http = HttpServer(0, java.net.InetAddress.getLoopbackAddress(), handler = server::handle).also { it.start() }
     val base = "http://127.0.0.1:${http.localPort}"
     val client: HttpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()
 
     init {
+        if (fixtures) fixtures()
+    }
+
+    private fun fixtures() {
         val hash = Security.hashPassword(PWD, 1000)
         sql.exec("INSERT INTO sites(code, name) VALUES ('T', 'Site test'), ('O', 'Autre site')")
-        sql.exec("INSERT INTO lines(site_id, code, name) VALUES (1, 'L1', 'Ligne 1'), (2, 'X1', 'Ligne autre site')")
+        sql.exec("INSERT INTO lines(site_id, code, name) VALUES (1, 'L1', 'Ligne 1'), (2, 'X1', 'Ligne autre site'), (1, 'L2', 'Ligne 2')")
+        sql.exec("INSERT INTO postes(line_id, code, name) VALUES (1, 'L1-A', 'Poste A'), (3, 'L2-A', 'Poste A ligne 2')")
         sql.exec(
-            "INSERT INTO machines(line_id, code, name, qr_token) VALUES (1, 'M1', 'Presse 1', 'q1'), " +
-                "(1, 'M2', 'Convoyeur', 'q2'), (2, 'XM', 'Machine autre site', 'q3')",
+            "INSERT INTO machines(line_id, poste_id, code, name, qr_token) VALUES (1, 1, 'M1', 'Presse 1', 'q1'), " +
+                "(1, NULL, 'M2', 'Convoyeur', 'q2'), (2, NULL, 'XM', 'Machine autre site', 'q3'), (3, 2, 'M3', 'Sertisseuse L2', 'q4')",
         )
         sql.exec(
-            "INSERT INTO failure_categories(site_id, code, name, default_priority) VALUES " +
-                "(1, 'MECA', 'Mécanique', 'NORMALE'), (1, 'SECU', 'Sécurité', 'CRITIQUE')",
+            "INSERT INTO failure_categories(site_id, code, name, default_priority, requires_quality) VALUES " +
+                "(1, 'MECA', 'Mécanique', 'NORMALE', 0), (1, 'SECU', 'Sécurité', 'CRITIQUE', 1)",
         )
-        listOf("chef" to Role.CHEF_EQUIPE, "chef2" to Role.CHEF_EQUIPE, "tech" to Role.TECHNICIEN,
-            "tech2" to Role.TECHNICIEN, "resp" to Role.RESPONSABLE, "admin" to Role.ADMIN, "chefo" to Role.CHEF_EQUIPE,
-        ).forEach { (u, r) ->
+        sql.exec("INSERT INTO failure_causes(category_id, name) VALUES (1, 'Usure'), (2, 'Barrière immatérielle')")
+        sql.exec("INSERT INTO cable_refs(site_id, code, name) VALUES (1, 'CBL-1', 'Câble test')")
+        sql.exec("INSERT INTO intervention_types(site_id, code, name) VALUES (1, 'CORR', 'Corrective')")
+        sql.exec("INSERT INTO tools(site_id, machine_id, code, name) VALUES (1, 1, 'APP-1', 'Applicateur')")
+        USERS.forEach { (u, r) ->
             sql.exec(
-                "INSERT INTO users(site_id, username, full_name, role, password_hash, must_change_password, created_at) " +
-                    "VALUES (?,?,?,?,?,0,0)", if (u == "chefo") 2 else 1, u, u.uppercase(), r, hash,
+                "INSERT INTO users(site_id, username, first_name, last_name, full_name, role, password_hash, must_change_password, created_at) " +
+                    "VALUES (?,?,?,?,?,?,?,0,0)", if (u == "chefo") 2 else 1, u, u, u.uppercase(), u.uppercase(), r, hash,
             )
         }
+        // Opérateurs et chef de ligne limités à une ligne.
+        sql.exec("INSERT INTO user_lines(user_id, line_id) SELECT id, 1 FROM users WHERE username IN ('op', 'cl')")
+        sql.exec("INSERT INTO user_lines(user_id, line_id) SELECT id, 3 FROM users WHERE username = 'op2'")
+    }
+
+    companion object {
+        val USERS = listOf(
+            "op" to Role.OPERATEUR, "op2" to Role.OPERATEUR, "cl" to Role.CHEF_LIGNE, "chef" to Role.CHEF_EQUIPE,
+            "chef2" to Role.CHEF_EQUIPE, "tech" to Role.MAINTENANCIER, "tech2" to Role.MAINTENANCIER, "meth" to Role.METHODE,
+            "qual" to Role.QUALITE, "logi" to Role.LOGISTIQUE, "resp" to Role.RESPONSABLE, "admin" to Role.ADMIN,
+            "chefo" to Role.CHEF_EQUIPE,
+        )
     }
 
     fun raw(method: String, path: String, body: String? = null, headers: Map<String, String> = emptyMap(),
@@ -77,10 +98,47 @@ class TestEnv(
 
     fun api(username: String) = Api(this, username)
 
-    val users by lazy { listOf("chef", "chef2", "tech", "tech2", "resp", "admin", "chefo").associateWith { api(it) } }
+    val users by lazy { USERS.map { it.first }.associateWith { api(it) } }
     val refs by lazy { users["chef"]!!.get("/referentials").json.jsonObject }
 
     fun id(list: String, i: Int) = refs[list]!!.jsonArray[i].jsonObject["id"]!!.jsonPrimitive.long
+
+    /** Identifiant d'un élément de référentiel par son code (ou son nom). */
+    fun ref(list: String, code: String) = refs[list]!!.jsonArray.map { it.jsonObject }
+        .first { it.s("code") == code || it.s("name") == code }.l("id")
+
+    fun userId(username: String) = sql.one("SELECT id FROM users WHERE username=?", username)!!.long("id")
+
+    /** Déclare une panne (machine M1, catégorie Mécanique par défaut). */
+    fun declare(api: Api, vararg kw: Pair<String, Any?>): JsonObject {
+        val body = mutableMapOf<String, Any?>(
+            "machine_id" to ref("machines", "M1"), "category_id" to ref("categories", "MECA"),
+            "description" to "Bourrage récurrent en sortie de presse",
+        )
+        kw.forEach { body[it.first] = it.second }
+        val r = api.post("/interventions", *body.toList().toTypedArray())
+        assertEquals(r.text, true, r.status == 200 || r.status == 201)
+        return r.obj
+    }
+
+    /** Fiche jaune complète, acceptée par « finish ». */
+    val YELLOW = arrayOf<Pair<String, Any?>>(
+        "diagnosis" to "Capteur inductif HS", "root_cause" to "Câble écrasé par le carter",
+        "corrective_action" to "Remplacement du capteur, protection du câble", "test_result" to "20 pièces conformes",
+        "machine_final_state" to "OPERATIONNELLE",
+    )
+
+    /** Déclaration par [by] puis prise en charge, démarrage et fin par tech : statut RESOLUE (ou attente Qualité). */
+    fun resolved(by: String = "chef", vararg kw: Pair<String, Any?>): JsonObject {
+        val t = users["tech"]!!
+        var iv = declare(users[by]!!, "production_stopped" to true, *kw)
+        iv = t.act(iv, "accept")
+        iv = t.act(iv, "start", 200, "diagnosis" to "Capteur inductif HS")
+        return t.act(iv, "finish", 200, *YELLOW)
+    }
+
+    fun closed(by: String = "chef"): JsonObject =
+        users["chef"]!!.act(resolved(by), "close", 200, "comment" to "Production relancée, OK", "signature_png_base64" to SIG)
 
     override fun close() {
         http.stop()
@@ -96,7 +154,7 @@ class Res(val status: Int, val bytes: ByteArray, val headers: Map<String, List<S
 }
 
 class Api(private val env: TestEnv, username: String) {
-    private val token: String
+    val token: String
     val user: JsonObject
 
     init {

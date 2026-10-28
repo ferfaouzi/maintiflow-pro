@@ -50,11 +50,6 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
     private val lock = Any()
     private val dummyHash by lazy { Security.hashPassword("dummy-password-0", config.passwordIterations) }
 
-    init {
-        Schema.migrate(sql)
-        routes()
-    }
-
     private fun now() = config.clock()
 
     fun handle(req: Request): Response = synchronized(lock) {
@@ -780,6 +775,9 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
         val user = user(req)
         val m = sql.one("SELECT m.*, l.site_id, l.code AS l_code FROM machines m JOIN lines l ON l.id = m.line_id WHERE m.id=?", machineId)
         if (m == null || m.long("site_id") != user.siteId) throw ApiException(404, "Machine introuvable")
+        if (user.role in Role.LINE_SCOPED && wf.userLines(user.id).let { it.isNotEmpty() && m.long("line_id") !in it }) {
+            throw ApiException(404, "Machine introuvable")
+        }
         val (vis, args) = wf.visibilitySql(user)
         val rows = sql.query("$SELECT_IV WHERE $vis AND i.machine_id = ? ORDER BY i.declared_at DESC LIMIT 200", *(args + machineId).toTypedArray())
         val t = now()
@@ -946,7 +944,7 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
             cols["default_priority"] = b.enum("default_priority", Priority.ALL) ?: existing?.str("default_priority") ?: "NORMALE"
             cols["requires_quality"] = b.bool("requires_quality") ?: existing?.bool("requires_quality") ?: false
         }
-        val newId: Long
+        var newId = 0L
         unique(spec.what) {
             if (existing == null) {
                 val extraCols = mutableMapOf<String, Any?>()
@@ -958,7 +956,7 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
                 newId = sql.lastInsertId()
             } else {
                 sql.exec("UPDATE ${spec.table} SET ${cols.keys.joinToString(",") { "$it=?" }} WHERE id=?", *(cols.values.toList() + id).toTypedArray())
-                newId = id!!
+                newId = id
             }
         }
         val before = existing?.let { rowJson(it) }
@@ -1099,6 +1097,12 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
         val (name, data) = provider()
         sql.transaction { audit("BACKUP_DOWNLOADED", u, "backup", null, jsonObj { put("size", data.size) }, req) }
         return file(data, "application/zip", name)
+    }
+
+    // Placé après toutes les propriétés : routes() lit refSpecs pendant l'enregistrement.
+    init {
+        Schema.migrate(sql)
+        routes()
     }
 
     // ================================================================== routes

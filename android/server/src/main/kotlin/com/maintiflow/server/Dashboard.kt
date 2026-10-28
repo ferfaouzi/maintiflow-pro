@@ -35,7 +35,8 @@ class Dashboard(private val sql: Sql, private val wf: Workflow, private val sett
             (Body.parseInstant(it) ?: runCatching { LocalDate.parse(it).atStartOfDay(ZoneId.of("UTC")).toInstant() }.getOrNull()
                 ?: throw ApiException(422, "$k invalide")).toEpochMilli()
         }
-        val to = date("date_to") ?: now
+        // Sans date de fin : jusqu'à maintenant inclus (la borne de fin est exclue dans les requêtes).
+        val to = date("date_to") ?: (now + 1)
         val from = date("date_from") ?: (to - 30 * 86_400_000L)
         if (from >= to) throw ApiException(422, "La date de début doit précéder la date de fin")
         val days = (to - from) / 86_400_000L

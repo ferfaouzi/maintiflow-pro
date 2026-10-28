@@ -20,29 +20,19 @@ class SecurityTest {
 
     @After fun tearDown() = env.close()
 
-    private fun newTicket(api: Api, vararg kw: Pair<String, Any?>): JsonObject {
-        val body = mutableMapOf<String, Any?>(
-            "machine_id" to env.id("machines", 0), "category_id" to env.id("categories", 0),
-            "description" to "Bourrage récurrent en sortie de presse",
-        )
-        kw.forEach { body[it.first] = it.second }
-        val r = api.post("/interventions", *body.toList().toTypedArray())
-        assertTrue(r.text, r.status == 201 || r.status == 200)
-        return r.obj
-    }
+    private fun newTicket(api: Api, vararg kw: Pair<String, Any?>): JsonObject = env.declare(api, *kw)
 
+    /** Panne complète : pièce consommée pendant l'intervention, fiche jaune remplie, clôture par le chef d'équipe. */
     private fun closed(): JsonObject {
+        val t = u["tech"]!!
         var iv = newTicket(u["chef"]!!, "production_stopped" to true)
-        iv = u["tech"]!!.act(iv, "accept")
-        iv = u["tech"]!!.act(iv, "start")
-        iv = u["tech"]!!.act(iv, "repair", 200, "diagnosis" to "Vérin HS", "corrective_action" to "Joint remplacé",
-            "machine_final_state" to "OPERATIONNELLE")
-        val r = u["tech"]!!.post("/interventions/${iv.s("id")}/parts", "reference" to "VER-32",
+        iv = t.act(iv, "accept")
+        iv = t.act(iv, "start", 200, "diagnosis" to "Vérin HS")
+        val r = t.post("/interventions/${iv.s("id")}/parts", "reference" to "VER-32",
             "designation" to "Joint de vérin Ø32", "quantity" to 2)
-        assertEquals(201, r.status)
-        iv = r.obj
-        iv = u["tech"]!!.act(iv, "sign_maintenance", 200, "signature_png_base64" to SIG)
-        return u["chef"]!!.act(iv, "confirm_production", 200, "signature_png_base64" to SIG)
+        assertEquals(r.text, 201, r.status)
+        iv = t.act(r.obj, "finish", 200, *env.YELLOW)
+        return u["chef"]!!.act(iv, "close", 200, "comment" to "Production relancée, OK", "signature_png_base64" to SIG)
     }
 
     @Test fun requiresAuthentication() {
@@ -55,7 +45,7 @@ class SecurityTest {
     }
 
     @Test fun rolePermissions() {
-        for (who in listOf("tech", "resp", "admin")) {
+        for (who in listOf("logi", "admin")) {
             assertEquals(403, u[who]!!.post("/interventions", "machine_id" to env.id("machines", 0),
                 "category_id" to env.id("categories", 0), "description" to "abc").status)
         }
@@ -63,8 +53,10 @@ class SecurityTest {
         u["chef"]!!.act(iv, "accept", 403)
         u["admin"]!!.act(iv, "accept", 403)
         u["resp"]!!.act(iv, "accept", 403)
+        u["qual"]!!.act(iv, "accept", 403)
+        u["logi"]!!.act(iv, "accept", 404)  // la Logistique ne voit que les pannes avec demande de pièces
         iv = u["tech"]!!.act(iv, "accept")
-        u["tech2"]!!.act(iv, "start", 403)
+        u["tech2"]!!.act(iv, "start", 403, "diagnosis" to "x")
         u["tech"]!!.act(iv, "assign", 403, "technician_id" to u["tech2"]!!.id)
         for (who in listOf("chef", "tech", "resp")) {
             assertEquals(403, u[who]!!.get("/admin/users").status)
@@ -104,10 +96,10 @@ class SecurityTest {
 
     @Test fun adminUserLifecycleAndForcedPasswordChange() {
         val admin = u["admin"]!!
-        val r = admin.post("/admin/users", "username" to "Nouveau.Tech", "full_name" to "Nouveau", "role" to "TECHNICIEN", "password" to "Initial123")
+        val r = admin.post("/admin/users", "username" to "Nouveau.Tech", "full_name" to "Nouveau", "role" to "MAINTENANCIER", "password" to "Initial123")
         assertEquals(r.text, 201, r.status); assertEquals("nouveau.tech", r.obj.s("username"))
-        assertEquals(409, admin.post("/admin/users", "username" to "nouveau.tech", "full_name" to "x", "role" to "TECHNICIEN", "password" to "Initial123").status)
-        assertEquals(422, admin.post("/admin/users", "username" to "faible", "full_name" to "x", "role" to "TECHNICIEN", "password" to "12345678").status)
+        assertEquals(409, admin.post("/admin/users", "username" to "nouveau.tech", "full_name" to "x", "role" to "MAINTENANCIER", "password" to "Initial123").status)
+        assertEquals(422, admin.post("/admin/users", "username" to "faible", "full_name" to "x", "role" to "MAINTENANCIER", "password" to "12345678").status)
         val login = env.raw("POST", "/api/v1/auth/login", jsonOf("username" to "nouveau.tech", "password" to "Initial123"))
         val o = kotlinx.serialization.json.Json.parseToJsonElement(String(login.body())).jsonObject
         val h = mapOf("Authorization" to "Bearer ${o.s("access_token")}")
@@ -214,7 +206,7 @@ class SecurityTest {
         assertEquals("application/pdf", r.header("content-type"))
         assertEquals("provisoire", r.header("x-document-kind"))
         val text = r.text
-        assertTrue(text.contains("EXEMPLAIRE PRODUCTION") && text.contains("EXEMPLAIRE MAINTENANCE"))
+        assertTrue(text.contains("PAGE ROSE") && text.contains("PAGE JAUNE"))
         assertTrue(text.split(iv.s("number")!!).size - 1 >= 2)
         assertTrue(text.contains("PROVISOIRE"))
         assertTrue(text.contains("éjecteur bloqué"))
@@ -228,7 +220,7 @@ class SecurityTest {
         assertEquals("archive", r1.header("x-document-kind"))
         assertArrayEquals(r1.bytes, r2.bytes)
         assertFalse(r1.text.contains("PROVISOIRE"))
-        assertTrue(r1.text.contains("Joint de vérin") && r1.text.contains("Clôturé"))
+        assertTrue(r1.text.contains("Joint de vérin") && r1.text.contains("Clôturée"))
         val path = env.sql.one("SELECT archived_pdf_path FROM interventions WHERE id=?", iv.s("id"))!!.str("archived_pdf_path")
         File(env.storage, path).appendBytes("tampered".toByteArray())
         assertEquals(500, u["chef"]!!.get("/interventions/${iv.s("id")}/pdf").status)
@@ -239,10 +231,9 @@ class SecurityTest {
             val chef = e.api("chef"); val tech = e.api("tech")
             var iv = chef.post("/interventions", "machine_id" to e.id("machines", 0), "category_id" to e.id("categories", 0),
                 "description" to "Capteur de porte HS").obj
-            iv = tech.act(iv, "accept"); iv = tech.act(iv, "start")
-            iv = tech.act(iv, "repair", 200, "diagnosis" to "d", "corrective_action" to "c", "machine_final_state" to "OPERATIONNELLE")
-            iv = tech.act(iv, "sign_maintenance")
-            iv = chef.act(iv, "confirm_production")
+            iv = tech.act(iv, "accept"); iv = tech.act(iv, "start", 200, "diagnosis" to "Capteur HS")
+            iv = tech.act(iv, "finish", 200, *e.YELLOW)
+            iv = chef.act(iv, "close", 200, "comment" to "Machine relancée")
             assertEquals("CLOTURE", iv.s("status"))
             assertEquals(500, chef.get("/interventions/${iv.s("id")}/pdf").status)
         }
@@ -259,7 +250,7 @@ class SecurityTest {
         }
         Seed.initialize(sql, "Demo2026x", null, withDemo = true, iterations = 1000, now = 0)
         assertTrue(Seed.isInitialized(sql))
-        assertEquals(6L, sql.one("SELECT COUNT(*) AS n FROM users")!!.long("n"))
+        assertEquals(12L, sql.one("SELECT COUNT(*) AS n FROM users")!!.long("n"))
         assertEquals(10L, sql.one("SELECT COUNT(*) AS n FROM machines")!!.long("n"))
         assertTrue(sql.query("SELECT full_name FROM users WHERE role<>'ADMIN'").all { it.str("full_name").contains("fictif") })
         try {

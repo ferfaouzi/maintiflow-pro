@@ -362,7 +362,7 @@ class Ref(val id: Long, val code: String, val name: String) {
 }
 
 /** Une panne avec tout ce qui l'accompagne (relations chargées depuis la base). */
-class IvFull(val iv: Iv, sql: Sql) {
+class IvFull(val iv: Iv, private val sql: Sql) {
     private fun ref(table: String, id: Long?): Ref? = id?.let {
         sql.one("SELECT id, code, name FROM $table WHERE id=?", it)?.let { r -> Ref(r.long("id"), r.str("code"), r.str("name")) }
     }
