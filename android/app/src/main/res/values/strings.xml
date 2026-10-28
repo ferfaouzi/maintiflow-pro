@@ -3,7 +3,7 @@
     <string name="app_name">MaintiFlow Pro</string>
     <!-- Connexion -->
     <string name="login_title">Connexion</string>
-    <string name="server_url">Adresse du serveur (https://…)</string>
+    <string name="server_url">Adresse du serveur (ex. http://192.168.1.50:8000)</string>
     <string name="username">Identifiant</string>
     <string name="password">Mot de passe</string>
     <string name="login">Se connecter</string>
@@ -86,4 +86,40 @@
     <string name="error_network">Serveur injoignable. Vérifiez le réseau.</string>
     <string name="error_session">Session expirée, reconnectez-vous.</string>
     <string name="required_fields">Choisissez la machine, le type de panne et décrivez le problème.</string>
+    <!-- Téléphone maître (serveur intégré) -->
+    <string name="master_open">Ce téléphone est le téléphone maître (serveur)</string>
+    <string name="master_title">Téléphone maître</string>
+    <string name="master_notification_title">MaintiFlow : ce téléphone est le serveur</string>
+    <string name="master_notification_text">Adresse pour les autres téléphones : %1$s</string>
+    <string name="master_intro">Ce téléphone garde tous les bons et sert les autres téléphones du même Wi-Fi (ou de son propre point d\'accès). Laissez-le allumé, branché sur son chargeur, près du point d\'accès.</string>
+    <string name="master_setup">Mise en service (une seule fois)</string>
+    <string name="master_setup_hint">Choisissez le mot de passe du compte « admin ». Il n\'est enregistré que sur ce téléphone.</string>
+    <string name="master_company">Nom affiché sur les bons (facultatif)</string>
+    <string name="master_admin_password">Mot de passe admin (8 caractères, lettres et chiffres)</string>
+    <string name="master_admin_password_confirm">Confirmez le mot de passe</string>
+    <string name="master_demo">Ajouter les données de démonstration fictives</string>
+    <string name="master_demo_hint">3 lignes, 10 machines et les comptes chef.l1, chef.l2, tech.1, tech.2, resp.maint, avec le même mot de passe que admin. Pour un essai seulement.</string>
+    <string name="master_create">CRÉER LE SERVEUR</string>
+    <string name="master_server">Serveur</string>
+    <string name="master_running">Serveur EN MARCHE</string>
+    <string name="master_stopped">Serveur ARRÊTÉ</string>
+    <string name="master_address_label">Adresse à saisir sur les autres téléphones :</string>
+    <string name="master_no_wifi">Aucun Wi-Fi détecté : connectez ce téléphone au point d\'accès (ou activez son partage de connexion).</string>
+    <string name="master_local_hint">Sur ce téléphone lui-même, l\'adresse est %1$s</string>
+    <string name="master_use_this_phone">SE CONNECTER SUR CE TÉLÉPHONE</string>
+    <string name="master_reliability">Rester actif</string>
+    <string name="master_autostart">Redémarrer le serveur automatiquement quand le téléphone redémarre</string>
+    <string name="master_battery_hint">Pour que le serveur ne soit pas coupé écran éteint, autorisez l\'application à ignorer l\'optimisation de la batterie.</string>
+    <string name="master_battery_button">Autoriser (batterie)</string>
+    <string name="master_charger_hint">Conseil : téléphone dédié, toujours sur le chargeur. Si la marque du téléphone a un « gestionnaire de batterie » (Xiaomi, Huawei, Samsung…), autorisez aussi MaintiFlow à démarrer et rester actif.</string>
+    <string name="master_backup">Sauvegarde</string>
+    <string name="master_backup_hint">Toutes les données sont sur ce téléphone. Exportez une sauvegarde chaque semaine (Drive, e-mail, clé USB) : si le téléphone est perdu, c\'est la seule copie.</string>
+    <string name="master_backup_export">Exporter une sauvegarde</string>
+    <string name="master_backup_restore">Restaurer une sauvegarde</string>
+    <string name="master_restore_stop_first">Arrêtez le serveur avant de restaurer.</string>
+    <string name="master_restore_warning">Toutes les données actuelles de ce serveur seront remplacées par celles de la sauvegarde. Continuer ?</string>
+    <string name="master_restored">Sauvegarde restaurée. Vous pouvez redémarrer le serveur.</string>
+    <string name="master_admin_reset">Mot de passe admin oublié</string>
+    <string name="master_admin_reset_hint">Réservé au propriétaire de ce téléphone : définit un nouveau mot de passe pour le compte « admin ».</string>
+    <string name="master_admin_reset_done">Nouveau mot de passe admin enregistré.</string>
 </resources>

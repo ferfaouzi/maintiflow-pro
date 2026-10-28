@@ -22,8 +22,8 @@ android {
         applicationId = "com.maintiflow.pro"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0-phase1"
+        versionCode = 2
+        versionName = "1.1.0-telephone-maitre"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
@@ -68,6 +68,7 @@ android {
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
+    implementation(project(":server"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -82,6 +83,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+    implementation(libs.sqlite.framework)  // base du serveur embarqué (téléphone maître)
     implementation(libs.work.runtime)
     implementation(libs.splashscreen)
     implementation(libs.security.crypto)
@@ -93,4 +95,6 @@ dependencies {
     implementation(libs.coil.compose)
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation(testFixtures(project(":server")))
+    testImplementation(libs.sqlite.jdbc)
 }

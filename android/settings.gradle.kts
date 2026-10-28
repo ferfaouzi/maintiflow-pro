@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MaintiFlowPro"
 include(":app")
+include(":server")

@@ -32,7 +32,7 @@ import com.maintiflow.pro.ui.components.BigButton
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(repo: Repository) {
+fun LoginScreen(repo: Repository, onMaster: () -> Unit) {
     val scope = rememberCoroutineScope()
     var server by rememberSaveable { mutableStateOf(repo.session.serverUrl.removeSuffix("/api/v1/")) }
     var username by rememberSaveable { mutableStateOf("") }
@@ -67,6 +67,7 @@ fun LoginScreen(repo: Repository) {
                 busy = false
             }
         }
+        BigButton(stringResource(R.string.master_open), fieldMod, primary = false, onClick = onMaster)
     }
 }
 

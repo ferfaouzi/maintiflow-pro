@@ -55,7 +55,8 @@ interface MaintiFlowApi {
 
     // Administration
     @GET("admin/settings") suspend fun settings(): SettingsResponse
-    @PUT("admin/settings") suspend fun putSettings(@Body body: Map<String, JsonElement>): SettingsResponse
+    // @JvmSuppressWildcards : sans lui, Retrofit refuse le type Map<String, ? extends JsonElement> à l'exécution.
+    @PUT("admin/settings") suspend fun putSettings(@Body body: Map<String, @JvmSuppressWildcards JsonElement>): SettingsResponse
     @GET("admin/users") suspend fun users(): List<UserDto>
     @POST("admin/users") suspend fun createUser(@Body body: UserCreateRequest): UserDto
     @PATCH("admin/users/{id}") suspend fun updateUser(@Path("id") id: Int, @Body body: UserUpdateRequest): UserDto

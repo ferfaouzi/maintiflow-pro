@@ -67,6 +67,6 @@ pytest -q                    # nécessite une base de test (voir docs/INSTALL_SE
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) · [Modèle de données](docs/DATA_MODEL.md) · [Workflow](docs/WORKFLOW.md) · [Écrans](docs/SCREENS.md)
-- [API](docs/API.md) · [Installation serveur](docs/INSTALL_SERVER.md) · [Compiler l'APK](docs/BUILD_ANDROID.md)
+- [API](docs/API.md) · [Installation serveur](docs/INSTALL_SERVER.md) · [Téléphone maître, sans PC](docs/TELEPHONE_MAITRE.md) · [Compiler l'APK](docs/BUILD_ANDROID.md)
 - [Sauvegarde / restauration](docs/BACKUP_RESTORE.md) · [Tests](docs/TESTS.md) · [Guide utilisateur](docs/USER_GUIDE.md)
 - [Comptes de démonstration](docs/DEMO_ACCOUNTS.md) · [Pilote et feuille de route](docs/ROADMAP.md) · [Préparation Google Play](docs/GOOGLE_PLAY.md)

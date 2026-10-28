@@ -11,6 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -18,11 +21,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.maintiflow.pro.data.Repository
+import com.maintiflow.pro.master.MasterController
 import com.maintiflow.pro.sync.SyncWorker
 import com.maintiflow.pro.ui.admin.AdminScreen
 import com.maintiflow.pro.ui.home.HomeScreen
 import com.maintiflow.pro.ui.login.ChangePasswordScreen
 import com.maintiflow.pro.ui.login.LoginScreen
+import com.maintiflow.pro.ui.master.MasterScreen
 import com.maintiflow.pro.ui.search.SearchScreen
 import com.maintiflow.pro.ui.settings.SettingsScreen
 import com.maintiflow.pro.ui.theme.MaintiFlowTheme
@@ -34,19 +39,20 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val repo = (application as MaintiFlowApp).container.repository
+        val container = (application as MaintiFlowApp).container
+        val repo = container.repository
         SyncWorker.enqueue(this)
         setContent {
             val dark by repo.session.darkMode.collectAsState()
             MaintiFlowTheme(dark = dark) {
-                Surface(Modifier.fillMaxSize()) { Root(repo) }
+                Surface(Modifier.fillMaxSize()) { Root(repo, container.master) }
             }
         }
     }
 }
 
 @Composable
-private fun Root(repo: Repository) {
+private fun Root(repo: Repository, master: MasterController) {
     val user by repo.session.user.collectAsState()
     val context = LocalContext.current
     LaunchedEffect(Unit) {
@@ -56,15 +62,17 @@ private fun Root(repo: Repository) {
         }
     }
     val u = user
+    var showMaster by rememberSaveable { mutableStateOf(false) }
     when {
-        u == null -> LoginScreen(repo)
+        showMaster -> MasterScreen(repo, master, onBack = { showMaster = false }, onUseThisPhone = { showMaster = false })
+        u == null -> LoginScreen(repo, onMaster = { showMaster = true })
         u.mustChangePassword -> ChangePasswordScreen(repo)
-        else -> AppNav(repo)
+        else -> AppNav(repo, onMaster = { showMaster = true })
     }
 }
 
 @Composable
-private fun AppNav(repo: Repository) {
+private fun AppNav(repo: Repository, onMaster: () -> Unit) {
     val nav = rememberNavController()
     val context = LocalContext.current
     NavHost(nav, startDestination = "home") {
@@ -89,7 +97,7 @@ private fun AppNav(repo: Repository) {
             TicketScreen(repo, entry.arguments?.getString("id")!!, onBack = { nav.popBackStack() })
         }
         composable("search") { SearchScreen(repo, onBack = { nav.popBackStack() }, onOpen = { nav.navigate("ticket/$it") }) }
-        composable("settings") { SettingsScreen(repo, onBack = { nav.popBackStack() }) }
+        composable("settings") { SettingsScreen(repo, onBack = { nav.popBackStack() }, onMaster = onMaster) }
         composable("admin") { AdminScreen(repo, onBack = { nav.popBackStack() }) }
     }
 }

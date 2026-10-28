@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(repo: Repository, onBack: () -> Unit) {
+fun SettingsScreen(repo: Repository, onBack: () -> Unit, onMaster: () -> Unit) {
     val scope = rememberCoroutineScope()
     val user by repo.session.user.collectAsState()
     val dark by repo.session.darkMode.collectAsState()
@@ -49,6 +49,7 @@ fun SettingsScreen(repo: Repository, onBack: () -> Unit) {
             }
             Text(stringResource(R.string.language), style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodyMedium)
+            BigButton(stringResource(R.string.master_title), primary = false, onClick = onMaster)
             BigButton(stringResource(R.string.logout), primary = false) { scope.launch { repo.logout() } }
         }
     }

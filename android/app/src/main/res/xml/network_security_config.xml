@@ -8,4 +8,9 @@
             <certificates src="user" />
         </trust-anchors>
     </base-config>
+    <!-- Mode téléphone maître : le téléphone serveur se connecte à lui-même sans quitter l'appareil. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
 </network-security-config>

@@ -32,7 +32,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee ../build.log
+          ./gradlew --no-daemon --stacktrace :server:test testDebugUnitTest assembleDebug 2>&1 | tee ../build.log
       - name: Rapport d'erreur (issue)
         if: failure()
         env:
