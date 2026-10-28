@@ -1,11 +1,13 @@
 package com.maintiflow.server
 
 /**
- * Schéma SQLite du serveur embarqué : mêmes tables et mêmes règles de traçabilité que le serveur
- * PostgreSQL (backend/alembic/versions/0001), adaptées à SQLite.
+ * Schéma SQLite du serveur MaintiFlow. Version 1 : mêmes tables et mêmes règles de traçabilité que le
+ * serveur PostgreSQL (backend/alembic/versions/0001). Version 2 : gestion des pannes complète (rôles,
+ * configuration de l'usine, page rose / page jaune, pièces, notifications). Une base neuve passe par les
+ * mêmes étapes qu'une base existante : la migration est donc exécutée par tous les tests.
  */
 object Schema {
-    const val VERSION = 1
+    const val VERSION = 2
 
     private val TABLES = listOf(
         """CREATE TABLE sites (
@@ -182,7 +184,7 @@ object Schema {
         "CREATE TRIGGER $name BEFORE $op ON $table BEGIN " +
             "SELECT RAISE(ABORT, 'MaintiFlow : $op interdit sur $table (traçabilité)'); END"
 
-    private val TRIGGERS = listOf(
+    private val TRIGGERS_V1 = listOf(
         forbid("mf_no_delete_interventions", "DELETE", "interventions"),
         forbid("mf_no_delete_events", "DELETE", "intervention_events"),
         forbid("mf_no_update_events", "UPDATE", "intervention_events"),
@@ -190,11 +192,7 @@ object Schema {
         forbid("mf_no_update_audit", "UPDATE", "audit_log"),
         forbid("mf_no_delete_signatures", "DELETE", "signatures"),
         forbid("mf_no_delete_attachments", "DELETE", "attachments"),
-        "CREATE TRIGGER mf_locked_interventions BEFORE UPDATE ON interventions " +
-            "WHEN OLD.status IN ('CLOTURE','ANNULE') AND NEW.status = OLD.status AND (" +
-            LOCKED_COLUMNS.joinToString(" OR ") { "NEW.$it IS NOT OLD.$it" } +
-            " OR (OLD.archived_pdf_path IS NOT NULL AND NEW.archived_pdf_path IS NOT OLD.archived_pdf_path)) " +
-            "BEGIN SELECT RAISE(ABORT, 'MaintiFlow : bon clôturé/annulé, modification interdite'); END",
+        lockedTrigger(LOCKED_COLUMNS),
         "CREATE TRIGGER mf_cancel_final BEFORE UPDATE ON interventions " +
             "WHEN OLD.status = 'ANNULE' AND NEW.status <> 'ANNULE' " +
             "BEGIN SELECT RAISE(ABORT, 'MaintiFlow : un bon annulé ne peut pas être réactivé'); END",
@@ -203,6 +201,118 @@ object Schema {
             "WHEN (SELECT status FROM interventions WHERE id = $ref.intervention_id) IN ('CLOTURE','ANNULE') " +
             "BEGIN SELECT RAISE(ABORT, 'MaintiFlow : pièces d''un bon clôturé non modifiables'); END"
     }
+
+    /** Colonnes ajoutées par la version 2 et figées elles aussi après clôture ou annulation. */
+    private val LOCKED_COLUMNS_V2 = LOCKED_COLUMNS + listOf(
+        "poste_id", "cable_ref_id", "title", "reporter_role", "service", "quality_validated_at", "quality_by_id",
+        "closed_by_id", "intervention_type_id", "cause_id", "tool_id", "test_result", "quality_observations",
+        "final_comment",
+    )
+
+    private fun lockedTrigger(columns: List<String>) =
+        "CREATE TRIGGER mf_locked_interventions BEFORE UPDATE ON interventions " +
+            "WHEN OLD.status IN ('CLOTURE','ANNULE') AND NEW.status = OLD.status AND (" +
+            columns.joinToString(" OR ") { "NEW.$it IS NOT OLD.$it" } +
+            " OR (OLD.archived_pdf_path IS NOT NULL AND NEW.archived_pdf_path IS NOT OLD.archived_pdf_path)) " +
+            "BEGIN SELECT RAISE(ABORT, 'MaintiFlow : panne clôturée/annulée, modification interdite'); END"
+
+    private fun addColumns(table: String, vararg defs: String) = defs.map { "ALTER TABLE $table ADD COLUMN $it" }
+
+    private val V2 = listOf(
+        // Utilisateurs : matricule (= username), nom et prénom séparés, lignes attribuées, inactivité.
+        *addColumns("users", "first_name TEXT NOT NULL DEFAULT ''", "last_name TEXT NOT NULL DEFAULT ''").toTypedArray(),
+        "UPDATE users SET last_name = full_name WHERE last_name = ''",
+        "UPDATE users SET role = 'MAINTENANCIER' WHERE role = 'TECHNICIEN'",
+        "ALTER TABLE user_sessions ADD COLUMN last_seen_at INTEGER",
+        """CREATE TABLE user_lines (
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            line_id INTEGER NOT NULL REFERENCES lines(id),
+            PRIMARY KEY (user_id, line_id))""",
+        // Configuration de l'usine.
+        """CREATE TABLE postes (
+            id INTEGER PRIMARY KEY,
+            line_id INTEGER NOT NULL REFERENCES lines(id),
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (line_id, code))""",
+        "ALTER TABLE machines ADD COLUMN poste_id INTEGER REFERENCES postes(id)",
+        """CREATE TABLE cable_refs (
+            id INTEGER PRIMARY KEY,
+            site_id INTEGER NOT NULL REFERENCES sites(id),
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (site_id, code))""",
+        """CREATE TABLE tools (
+            id INTEGER PRIMARY KEY,
+            site_id INTEGER NOT NULL REFERENCES sites(id),
+            machine_id INTEGER REFERENCES machines(id),
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (site_id, code))""",
+        "ALTER TABLE failure_categories ADD COLUMN requires_quality INTEGER NOT NULL DEFAULT 0",
+        """CREATE TABLE failure_causes (
+            id INTEGER PRIMARY KEY,
+            category_id INTEGER NOT NULL REFERENCES failure_categories(id),
+            code TEXT NOT NULL DEFAULT '',
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (category_id, name))""",
+        """CREATE TABLE intervention_types (
+            id INTEGER PRIMARY KEY,
+            site_id INTEGER NOT NULL REFERENCES sites(id),
+            code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (site_id, code))""",
+        // Page rose / page jaune.
+        *addColumns(
+            "interventions",
+            "poste_id INTEGER REFERENCES postes(id)", "cable_ref_id INTEGER REFERENCES cable_refs(id)", "title TEXT",
+            "reporter_role TEXT", "service TEXT", "quality_validated_at INTEGER",
+            "quality_by_id INTEGER REFERENCES users(id)", "closed_by_id INTEGER REFERENCES users(id)",
+            "intervention_type_id INTEGER REFERENCES intervention_types(id)",
+            "cause_id INTEGER REFERENCES failure_causes(id)", "tool_id INTEGER REFERENCES tools(id)",
+            "test_result TEXT", "quality_observations TEXT", "final_comment TEXT", "late_notified_at INTEGER",
+        ).toTypedArray(),
+        "UPDATE interventions SET reporter_role = (SELECT role FROM users WHERE users.id = interventions.reported_by_id)",
+        "UPDATE interventions SET service = 'MAINTENANCE' WHERE assigned_to_id IS NOT NULL",
+        "UPDATE interventions SET status = 'EN_DIAGNOSTIC' WHERE status = 'ACCEPTE'",
+        "UPDATE interventions SET status = 'INTERVENTION_MAINTENANCE' WHERE status = 'EN_COURS'",
+        "UPDATE interventions SET status = 'RESOLUE' WHERE status IN ('REPARE', 'VALIDATION_PRODUCTION')",
+        "CREATE INDEX ix_interventions_line_id ON interventions(line_id)",
+        "CREATE INDEX ix_interventions_declared_at ON interventions(declared_at)",
+        // Demandes de pièces (Logistique).
+        """CREATE TABLE part_requests (
+            id INTEGER PRIMARY KEY,
+            intervention_id TEXT NOT NULL REFERENCES interventions(id),
+            reference TEXT NOT NULL,
+            designation TEXT,
+            quantity TEXT NOT NULL DEFAULT '1',
+            status TEXT NOT NULL DEFAULT 'DEMANDEE',
+            requested_by_id INTEGER NOT NULL REFERENCES users(id),
+            requested_at INTEGER NOT NULL,
+            handled_by_id INTEGER REFERENCES users(id),
+            handled_at INTEGER,
+            comment TEXT)""",
+        "CREATE INDEX ix_part_requests_intervention_id ON part_requests(intervention_id)",
+        // Notifications, une ligne par destinataire.
+        """CREATE TABLE notifications (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            intervention_id TEXT REFERENCES interventions(id),
+            type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            read_at INTEGER)""",
+        "CREATE INDEX ix_notifications_user ON notifications(user_id, read_at)",
+        forbid("mf_no_delete_part_requests", "DELETE", "part_requests"),
+        "DROP TRIGGER mf_locked_interventions",
+        lockedTrigger(LOCKED_COLUMNS_V2),
+    )
 
     /**
      * Crée le schéma si la base est vide. Idempotent. La version est tenue dans la table mf_meta
@@ -213,7 +323,8 @@ object Schema {
         val current = sql.one("SELECT value FROM mf_meta WHERE key='schema_version'")?.str("value")?.toInt() ?: 0
         if (current >= VERSION) return
         sql.transaction {
-            (TABLES + TRIGGERS).forEach { sql.exec(it) }
+            if (current < 1) (TABLES + TRIGGERS_V1).forEach { sql.exec(it) }
+            if (current < 2) V2.forEach { sql.exec(it) }
             sql.exec("INSERT OR REPLACE INTO mf_meta(key, value) VALUES ('schema_version', ?)", VERSION.toString())
         }
     }

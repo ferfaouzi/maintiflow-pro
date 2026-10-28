@@ -262,7 +262,7 @@ class HttpServer(
     }
 
     private fun reason(code: Int) = when (code) {
-        200 -> "OK"; 201 -> "Created"; 204 -> "No Content"; 400 -> "Bad Request"; 401 -> "Unauthorized"
+        200 -> "OK"; 201 -> "Created"; 204 -> "No Content"; 302 -> "Found"; 400 -> "Bad Request"; 401 -> "Unauthorized"
         403 -> "Forbidden"; 404 -> "Not Found"; 405 -> "Method Not Allowed"; 409 -> "Conflict"
         413 -> "Payload Too Large"; 415 -> "Unsupported Media Type"; 422 -> "Unprocessable Entity"
         423 -> "Locked"; 431 -> "Request Header Fields Too Large"; 500 -> "Internal Server Error"
