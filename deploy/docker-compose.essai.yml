@@ -1,0 +1,7 @@
+# Essai sur le réseau Wi-Fi local avec l'APK debug (HTTP, sans certificat à installer sur les téléphones).
+# À ajouter au fichier principal :
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.essai.yml --env-file deploy/.env up -d --build
+# Ne pas utiliser en pilote réel : le trafic n'est pas chiffré.
+services:
+  api:
+    ports: ["8000:8000"]
