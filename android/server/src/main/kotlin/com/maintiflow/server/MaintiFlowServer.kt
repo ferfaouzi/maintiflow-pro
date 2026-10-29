@@ -996,6 +996,10 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
     private fun activeAdmins(siteId: Long) =
         sql.one("SELECT COUNT(*) AS n FROM users WHERE site_id=? AND role='ADMIN' AND active=1", siteId)!!.long("n")
 
+    /** Rôle reçu ; « TECHNICIEN » (applications version 1) est compris comme MAINTENANCIER. */
+    private fun roleIn(b: Body): String? =
+        b.enum("role", Role.ALL + Role.TECHNICIEN_V1)?.let { if (it == Role.TECHNICIEN_V1) Role.MAINTENANCIER else it }
+
     private fun createUser(req: Request): Response {
         val u = admin(req)
         val b = Body(req.json())
@@ -1004,7 +1008,7 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
         val first = b.str("first_name", max = 60)?.trim().orEmpty()
         val last = b.str("last_name", max = 60)?.trim().orEmpty()
         val fullName = User.displayName(first, last).ifEmpty { b.reqStr("full_name", 1, 120).trim() }
-        val role = b.enum("role", Role.ALL) ?: throw ApiException(422, "Champ role obligatoire")
+        val role = roleIn(b) ?: throw ApiException(422, "Champ role obligatoire")
         val password = b.reqStr("password", 8, 200)
         Security.checkPasswordPolicy(password)
         val active = b.bool("active") ?: true
@@ -1030,7 +1034,7 @@ class MaintiFlowServer(private val sql: Sql, private val config: ServerConfig) {
         val first = b.str("first_name", max = 60)?.trim()
         val last = b.str("last_name", max = 60)?.trim()
         val fullNameIn = b.str("full_name", max = 120)?.trim()
-        val role = b.enum("role", Role.ALL)
+        val role = roleIn(b)
         val active = b.bool("active")
         val reset = b.str("reset_password", 8, 200)
         val lines = longList(b, "line_ids")

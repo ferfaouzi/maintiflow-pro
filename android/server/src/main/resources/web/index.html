@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MaintiFlow Pro</title>
+  <link rel="stylesheet" href="/app/styles.css">
+</head>
+<body>
+  <header id="top" hidden>
+    <a class="brand" href="#/pannes">MaintiFlow Pro</a>
+    <nav id="nav"></nav>
+    <div class="who">
+      <button id="bell" class="bell" type="button" aria-label="Notifications">🔔<span id="bell-count" hidden></span></button>
+      <span id="who-name"></span>
+      <button id="logout" type="button" class="ghost">Déconnexion</button>
+    </div>
+  </header>
+  <div id="notif-panel" class="notif-panel" hidden></div>
+  <main id="app"><p class="muted">Chargement de MaintiFlow…</p></main>
+  <div id="dialog-back" class="dialog-back" hidden><div id="dialog" class="dialog" role="dialog" aria-modal="true"></div></div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app/app.js"></script>
+</body>
+</html>

@@ -77,7 +77,9 @@ import com.maintiflow.pro.ui.components.formatDuration
 import com.maintiflow.pro.ui.theme.StatusStyle
 import java.io.File
 
-private val COMMENT_REQUIRED = setOf("pause", "wait_part", "cancel", "reopen", "reject_production", "reject_maintenance")
+private val COMMENT_REQUIRED = setOf("pause", "wait_part", "cancel", "reopen", "reject_production", "reject_maintenance",
+    // Version 2 : motif obligatoire (5 caractères minimum).
+    "transfer", "part_unavailable", "quality_reject", "close", "reject_resolution")
 private val SIGNATURE_ACTIONS = setOf("sign_maintenance", "validate_maintenance", "confirm_production")
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -92,7 +94,7 @@ fun TicketScreen(repo: Repository, id: String, onBack: () -> Unit) {
     val imageLoader = remember { ImageLoader.Builder(context).okHttpClient(repo.client.http).build() }
 
     LaunchedEffect(role) {
-        if (role == "TECHNICIEN" || role == "RESPONSABLE") vm.loadSimilar()
+        if (role in StatusStyle.intervenants || role == "RESPONSABLE") vm.loadSimilar()
         if (role == "RESPONSABLE") vm.loadRefs()
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -138,7 +140,7 @@ fun TicketScreen(repo: Repository, id: String, onBack: () -> Unit) {
                 Header(t)
                 if (!st.fromCache) Actions(t, st.busy) { name ->
                     when {
-                        name == "repair" -> dialog = "repair"
+                        name == "repair" || name == "start" || name == "finish" || name == "transfer" -> dialog = name
                         name in COMMENT_REQUIRED || name in SIGNATURE_ACTIONS || name in setOf("assign", "flag_recurring") ->
                             dialog = name
                         else -> vm.action(name)
@@ -148,7 +150,7 @@ fun TicketScreen(repo: Repository, id: String, onBack: () -> Unit) {
 
                 Report(t) { d, r, c, o, s -> vm.saveReport(d, r, c, o, s) }
                 Parts(t, onAdd = { dialog = "part" }, onDelete = vm::deletePart)
-                Photos(t, repo, imageLoader, canChef = role == "CHEF_EQUIPE", onTake = ::takePhoto)
+                Photos(t, repo, imageLoader, canChef = role in StatusStyle.chefs || role == "OPERATEUR", onTake = ::takePhoto)
                 Times(t)
                 Signatures(t)
                 st.similar?.takeIf { it.items.isNotEmpty() && !t.locked }?.let { sim ->
@@ -175,6 +177,29 @@ fun TicketScreen(repo: Repository, id: String, onBack: () -> Unit) {
             hint = "Vérifiez le rapport technique (diagnostic, actions, état final) avant de terminer.",
             required = false, onDismiss = { dialog = null },
         ) { c -> vm.action("repair", ActionRequest(comment = c)); dialog = null }
+        "start" -> CommentDialog(
+            title = StatusStyle.actionLabel["start"]!!,
+            hint = "Diagnostic obligatoire pour démarrer l'intervention.",
+            required = true, onDismiss = { dialog = null },
+        ) { c -> vm.action("start", ActionRequest(diagnosis = c ?: t.diagnosis)); dialog = null }
+        // Page jaune : les champs enregistrés dans « Rapport » sont repris ; le résultat des tests est demandé ici.
+        "finish" -> CommentDialog(
+            title = StatusStyle.actionLabel["finish"]!!,
+            hint = "Enregistrez d'abord le rapport (diagnostic, cause, actions, état final). Indiquez le résultat des tests :",
+            required = true, onDismiss = { dialog = null },
+        ) { c ->
+            vm.action("finish", ActionRequest(testResult = c, diagnosis = t.diagnosis, rootCause = t.rootCause,
+                correctiveAction = t.correctiveAction, machineFinalState = t.machineFinalState))
+            dialog = null
+        }
+        "transfer" -> CommentDialog(
+            title = StatusStyle.actionLabel["transfer"]!!,
+            hint = "La panne passera au service " + (if (t.service == "METHODE") "Maintenance" else "Méthode") + ". Motif :",
+            required = true, onDismiss = { dialog = null },
+        ) { c ->
+            vm.action("transfer", ActionRequest(service = if (t.service == "METHODE") "MAINTENANCE" else "METHODE", comment = c))
+            dialog = null
+        }
         "assign" -> AssignDialog(st.refs, t, onDismiss = { dialog = null }) { techId, prio ->
             vm.action("assign", ActionRequest(technicianId = techId, priority = prio)); dialog = null
         }

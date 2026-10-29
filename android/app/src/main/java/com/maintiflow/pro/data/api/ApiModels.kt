@@ -194,6 +194,10 @@ data class TicketDetail(
     val events: List<EventDto>,
     @SerialName("allowed_actions") val allowedActions: List<String>,
     @SerialName("editable_fields") val editableFields: List<String>,
+    // Version 2 (absents d'un serveur version 1).
+    val title: String? = null,
+    val service: String? = null,
+    @SerialName("test_result") val testResult: String? = null,
 )
 
 @Serializable
@@ -233,6 +237,9 @@ data class ActionRequest(
     @SerialName("root_cause") val rootCause: String? = null,
     @SerialName("corrective_action") val correctiveAction: String? = null,
     @SerialName("machine_final_state") val machineFinalState: String? = null,
+    // Version 2
+    @SerialName("test_result") val testResult: String? = null,
+    val service: String? = null,
 )
 
 @Serializable

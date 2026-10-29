@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -103,9 +104,12 @@ fun HomeScreen(
     val pending by vm.pending.collectAsState(initial = emptyList())
     val user by repo.session.user.collectAsState()
     val role = user?.role ?: ""
-    val isChef = role == "CHEF_EQUIPE"
+    val isChef = role in StatusStyle.chefs
+    // Serveur version 2 : tous ces rôles remplissent une page rose (le serveur vérifie les droits).
+    val canDeclare = role in setOf("OPERATEUR", "CHEF_LIGNE", "CHEF_EQUIPE", "MAINTENANCIER", "METHODE", "QUALITE", "RESPONSABLE")
+    val context = androidx.compose.ui.platform.LocalContext.current
     var tab by rememberSaveable { mutableStateOf(0) }
-    val mine = isChef && tab == 1 || role == "TECHNICIEN" && tab == 1
+    val mine = (isChef || role in StatusStyle.intervenants || role == "OPERATEUR") && tab == 1
 
     // Rafraîchissement automatique toutes les 20 s : les nouvelles demandes apparaissent sans action.
     LaunchedEffect(mine) {
@@ -132,6 +136,13 @@ fun HomeScreen(
             actions = {
                 IconButton(onClick = { vm.load(mine) }) { Icon(Icons.Default.Refresh, stringResource(R.string.refresh)) }
                 IconButton(onClick = onSearch) { Icon(Icons.Default.Search, stringResource(R.string.search)) }
+                // Interface web du même serveur : tableau de bord, historique complet, administration de l'usine.
+                IconButton(onClick = {
+                    val web = repo.session.serverUrl.substringBefore("api/v1") + "app/"
+                    runCatching {
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(web)))
+                    }
+                }) { Icon(Icons.Default.Dashboard, "Tableau de bord web") }
                 if (role == "ADMIN") IconButton(onClick = onAdmin) {
                     Icon(Icons.Default.AdminPanelSettings, stringResource(R.string.admin))
                 }
@@ -145,11 +156,11 @@ fun HomeScreen(
             if (pending.isNotEmpty()) Banner(stringResource(R.string.pending_sync, pending.size), Color(0xFF6A1B9A))
             state.error?.let { Banner(it, MaterialTheme.colorScheme.error) }
 
-            if (isChef) {
+            if (canDeclare) {
                 BigButton("＋  " + stringResource(R.string.new_ticket), Modifier.padding(16.dp),
                     container = MaterialTheme.colorScheme.secondary, onClick = onNewTicket)
             }
-            if (isChef || role == "TECHNICIEN") {
+            if (isChef || role in StatusStyle.intervenants || role == "OPERATEUR") {
                 TabRow(selectedTabIndex = tab) {
                     Tab(tab == 0, { tab = 0 }, text = { Text(stringResource(R.string.home_priority)) })
                     Tab(tab == 1, { tab = 1 }, text = { Text(stringResource(R.string.home_mine)) })

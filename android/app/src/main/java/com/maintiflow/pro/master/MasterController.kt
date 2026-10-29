@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.maintiflow.pro.BuildConfig
+import com.maintiflow.server.Backup
 import com.maintiflow.server.HttpServer
 import com.maintiflow.server.MaintiFlowServer
 import com.maintiflow.server.Seed
@@ -71,6 +72,8 @@ class MasterController(private val context: Context) {
                 pdf = AndroidPdfRenderer(),
                 passwordIterations = ITERATIONS,
                 version = BuildConfig.VERSION_NAME,
+                // Bouton « Sauvegarde » de l'administration web : même ZIP que l'écran du téléphone maître.
+                backup = { exportBackup().let { it.name to it.readBytes() } },
                 log = { Log.i(TAG, it) },
             ))
             http = HttpServer(PORT, null, log = { Log.i(TAG, it) }, handler = server::handle).also { it.start() }
@@ -141,7 +144,7 @@ class MasterController(private val context: Context) {
                     if (e.isDirectory) continue
                     target.parentFile?.mkdirs()
                     FileOutputStream(target).use { zip.copyTo(it) }
-                    if (e.name == DB_NAME) hasDb = true
+                    if (e.name == DB_NAME || e.name == Backup.DB_ENTRY) hasDb = true
                 }
             }
         }
@@ -150,7 +153,8 @@ class MasterController(private val context: Context) {
         sqlOrNull = null
         val dbFile = context.getDatabasePath(DB_NAME)
         listOf("", "-wal", "-shm", "-journal").forEach { File(dbFile.path + it).delete() }
-        File(tmp, DB_NAME).copyTo(dbFile, overwrite = true)
+        // Sauvegarde du téléphone (maintiflow_server.db) ou du serveur PC (maintiflow.db).
+        (File(tmp, DB_NAME).takeIf { it.exists() } ?: File(tmp, Backup.DB_ENTRY)).copyTo(dbFile, overwrite = true)
         storageDir.deleteRecursively()
         File(tmp, "storage").takeIf { it.exists() }?.copyRecursively(storageDir, overwrite = true)
         tmp.deleteRecursively()

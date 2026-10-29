@@ -15,3 +15,5 @@ dependencyResolutionManagement {
 rootProject.name = "MaintiFlowPro"
 include(":app")
 include(":server")
+// Serveur PC / Raspberry Pi (même code serveur, fichier .jar).
+include(":server-pc")

@@ -13,12 +13,13 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import com.maintiflow.server.PdfBlock
 import com.maintiflow.server.PdfDoc
+import com.maintiflow.server.PdfPart
 import com.maintiflow.server.PdfRenderer
 import java.io.ByteArrayOutputStream
 
 /**
- * Dessin du bon « autocopiant » avec android.graphics.pdf : A4, deux exemplaires (Production / Maintenance),
- * même mise en page que le PDF du serveur PC (backend/app/pdf.py). Unités : points PDF (1/72 pouce).
+ * Dessin de la fiche de panne avec android.graphics.pdf : A4, une page rose (déclaration) et une page jaune
+ * (intervention et clôture) sous le même numéro. Unités : points PDF (1/72 pouce).
  */
 class AndroidPdfRenderer : PdfRenderer {
     private companion object {
@@ -32,7 +33,6 @@ class AndroidPdfRenderer : PdfRenderer {
         val GREY = Color.rgb(0x5F, 0x6B, 0x73)
         val LIGHT = Color.rgb(0xEE, 0xF2, 0xF5)
         val BORDER = Color.rgb(0xB0, 0xBE, 0xC5)
-        val COPY_COLORS = mapOf("PRODUCTION" to Color.rgb(0x15, 0x65, 0xC0), "MAINTENANCE" to Color.rgb(0xE6, 0x51, 0x00))
     }
 
     private fun paint(size: Float, bold: Boolean = false, color: Int = Color.BLACK) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -64,11 +64,14 @@ class AndroidPdfRenderer : PdfRenderer {
         var y = TOP
         private var number = 0
         val contentWidth = W - 2 * MARGIN
+        /** Partie en cours : sa couleur de papier est reprise sur les pages suivantes. */
+        var paper: Int? = null
 
         fun newPage() {
             finishPage()
             number++
             page = pdf.startPage(PdfDocument.PageInfo.Builder(W, H, number).create()).also { canvas = it.canvas }
+            paper?.let { canvas.drawColor(Color.rgb((it shr 16) and 0xFF, (it shr 8) and 0xFF, it and 0xFF)) }
             y = TOP
         }
 
@@ -93,10 +96,11 @@ class AndroidPdfRenderer : PdfRenderer {
     override fun render(doc: PdfDoc): ByteArray {
         val w = Writer(doc)
         try {
-            doc.copies.forEach { copy ->
+            doc.parts.forEach { part ->
+                w.paper = part.paper
                 w.newPage()
-                header(w, copy)
-                doc.blocks.forEach { block(w, it) }
+                header(w, part)
+                part.blocks.forEach { block(w, it) }
             }
             w.finishPage()
             return ByteArrayOutputStream().also { w.pdf.writeTo(it) }.toByteArray()
@@ -105,20 +109,21 @@ class AndroidPdfRenderer : PdfRenderer {
         }
     }
 
-    private fun header(w: Writer, copy: String) {
+    private fun rgb(c: Int) = Color.rgb((c shr 16) and 0xFF, (c shr 8) and 0xFF, c and 0xFF)
+
+    private fun header(w: Writer, part: PdfPart) {
         val c = w.canvas
         val doc = w.doc
         c.drawText("MaintiFlow Pro", MARGIN, w.y + 10f, bold)
         layout(doc.company, small, 125f).drawAt(c, MARGIN, w.y + 13f)
-        layout("BON D'INTERVENTION MAINTENANCE", title, 250f, Layout.Alignment.ALIGN_CENTER).drawAt(c, MARGIN + 130f, w.y + 2f)
+        layout(doc.title, title, 250f, Layout.Alignment.ALIGN_CENTER).drawAt(c, MARGIN + 130f, w.y + 2f)
         val right = MARGIN + w.contentWidth - 140f
         c.drawText(doc.number, right, w.y + 12f, paint(12f, true, NAVY))
         layout(doc.statusLabel, small, 140f).drawAt(c, right, w.y + 16f)
         w.y += 40f
-        fill.color = COPY_COLORS[copy] ?: NAVY
+        fill.color = rgb(part.color)
         c.drawRect(MARGIN, w.y, MARGIN + w.contentWidth, w.y + 15f, fill)
-        val label = "EXEMPLAIRE $copy"
-        c.drawText(label, MARGIN + (w.contentWidth - white.measureText(label)) / 2, w.y + 11f, white)
+        c.drawText(part.label, MARGIN + (w.contentWidth - white.measureText(part.label)) / 2, w.y + 11f, white)
         w.y += 23f
     }
 
