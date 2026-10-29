@@ -1,4 +1,25 @@
-# MaintiFlow Pro – Phase 1
+# MaintiFlow Pro
+
+## Version 2 – gestion des pannes et de la maintenance industrielle
+
+Rôles Opérateur, Chef de ligne, Chef d'équipe, Maintenancier, Méthode, Qualité, Logistique, Responsable,
+Administrateur ; 10 statuts ; page rose (déclaration) et page jaune (intervention et clôture) sous le même
+numéro ; configuration complète de l'usine ; tableau de bord MTTR / MTBF / récurrence avec exports Excel et
+PDF ; notifications ; interface web pour PC et tablette ; serveur sur téléphone maître **ou** sur PC /
+Raspberry Pi (`maintiflow-server.jar`).
+
+- [Rôles, droits et workflow](docs/v2/DROITS-ET-WORKFLOW.md)
+- [Guide d'utilisation](docs/v2/GUIDE-UTILISATEUR.md)
+- [Installation et compte administrateur initial](docs/v2/INSTALLATION.md)
+- [Structure de la base de données](docs/v2/BASE-DE-DONNEES.md)
+- [Tests](docs/v2/TESTS.md)
+
+Le serveur FastAPI (`backend/`) reste en version 1 ; la version 2 tourne sur le serveur Kotlin
+(`android/server`, partagé par le téléphone maître et le serveur PC `android/server-pc`).
+
+---
+
+# Phase 1 (historique)
 
 Bons d'intervention numériques « autocopiants » entre la Production et la Maintenance industrielle.
 Application Android (Kotlin / Jetpack Compose) + serveur central (FastAPI / PostgreSQL).

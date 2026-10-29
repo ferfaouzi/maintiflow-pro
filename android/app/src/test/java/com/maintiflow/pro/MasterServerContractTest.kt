@@ -56,7 +56,7 @@ class MasterServerContractTest {
 
             val refs = chef.referentials()
             assertEquals(3, refs.lines.size); assertEquals(10, refs.machines.size); assertEquals(8, refs.categories.size)
-            assertEquals(2, refs.technicians.size)
+            assertEquals(3, refs.technicians.size)  // 2 maintenanciers + 1 Méthode (fictifs)
             assertEquals("chef.l1", chef.me().username)
 
             val now = Instant.now().toString()
@@ -78,29 +78,41 @@ class MasterServerContractTest {
 
             t = resp.action(t.id, "assign", ActionRequest(version = t.version, technicianId = refs.technicians.first { it.username == "tech.1" }.id, priority = "HAUTE"))
             t = tech.action(t.id, "accept", ActionRequest(version = t.version))
-            t = tech.action(t.id, "start", ActionRequest(version = t.version))
-            assertEquals("EN_COURS", t.status)
+            assertEquals("EN_DIAGNOSTIC", t.status)
+            // Version 2 : diagnostic obligatoire pour démarrer (dialogue « DÉMARRER » de l'application).
+            try { tech.action(t.id, "start", ActionRequest(version = t.version)); fail() } catch (e: HttpException) { assertEquals(422, e.code()) }
+            t = tech.action(t.id, "start", ActionRequest(version = t.version, diagnosis = "Capteur HS"))
+            assertEquals("INTERVENTION_MAINTENANCE", t.status)
             t = tech.patch(t.id, PatchTicketRequest(version = t.version, diagnosis = "Capteur HS", observations = "RAS"))
             t = tech.addPart(t.id, PartRequest("IG5953", "Capteur inductif", 2.0))
             assertEquals("2.00", t.parts[0].quantity)
             t = tech.addPart(t.id, PartRequest("X", "Erreur", 1.0))
             t = tech.deletePart(t.id, t.parts[1].id)
             assertEquals(1, t.parts.size)
-            try { tech.action(t.id, "repair", ActionRequest(version = t.version)); fail() } catch (e: HttpException) {
-                assertEquals(422, e.code())
-                assertTrue(e.response()!!.errorBody()!!.string().contains("actions correctives"))
+            // « TERMINER » sans la page jaune complète : refusé.
+            try { tech.action(t.id, "finish", ActionRequest(version = t.version)); fail() } catch (e: HttpException) { assertEquals(422, e.code()) }
+            t = tech.patch(t.id, PatchTicketRequest(version = t.version, rootCause = "Câble écrasé", correctiveAction = "Remplacement",
+                machineFinalState = "OPERATIONNELLE"))
+            // Comme le dialogue « TERMINER » : rapport enregistré repris, résultat des tests saisi.
+            t = tech.action(t.id, "finish", ActionRequest(version = t.version, testResult = "20 pièces conformes", diagnosis = t.diagnosis,
+                rootCause = t.rootCause, correctiveAction = t.correctiveAction, machineFinalState = t.machineFinalState))
+            assertTrue(t.status, t.status == "RESOLUE" || t.status == "EN_ATTENTE_QUALITE")
+            assertEquals("20 pièces conformes", t.testResult)
+            if (t.status == "EN_ATTENTE_QUALITE") {
+                tokens["qualite.1"] = as_("qualite.1").login(LoginRequest("qualite.1", "Demo2026x")).accessToken
+                t = as_("qualite.1").action(t.id, "quality_validate", ActionRequest(version = t.version))
             }
-            t = tech.action(t.id, "repair", ActionRequest(version = t.version, correctiveAction = "Remplacement", machineFinalState = "OPERATIONNELLE"))
-            val sig = java.util.Base64.getEncoder().encodeToString(byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 1, 2))
-            t = tech.action(t.id, "sign_maintenance", ActionRequest(version = t.version, signaturePngBase64 = sig))
-            assertEquals("VALIDATION_PRODUCTION", t.status)
             assertTrue(chef.pdf(t.id).bytes().toString(Charsets.UTF_8).contains("PROVISOIRE"))
-            t = chef.action(t.id, "confirm_production", ActionRequest(version = t.version, signaturePngBase64 = sig, comment = "OK"))
+            // Clôture : justification obligatoire.
+            try { chef.action(t.id, "close", ActionRequest(version = t.version)); fail() } catch (e: HttpException) { assertEquals(422, e.code()) }
+            val sig = java.util.Base64.getEncoder().encodeToString(byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 1, 2))
+            t = chef.action(t.id, "close", ActionRequest(version = t.version, signaturePngBase64 = sig, comment = "Production relancée OK"))
             assertEquals("CLOTURE", t.status); assertTrue(t.locked)
             assertTrue(t.durations.response != null && !t.durations.running)
             assertTrue(t.events.any { it.type == "SIGNATURE" && it.data != null })
             val closedPdf = chef.pdf(t.id).bytes().toString(Charsets.UTF_8)
-            assertFalse(closedPdf.contains("PROVISOIRE")); assertTrue(closedPdf.contains("Clôturé"))
+            assertFalse(closedPdf.contains("PROVISOIRE")); assertTrue(closedPdf.contains("Clôturée"))
+            assertTrue(closedPdf.contains("PAGE ROSE") && closedPdf.contains("PAGE JAUNE"))
             assertTrue(tech.similar(t.id).disclaimer.isNotEmpty())
             try { chef.action(t.id, "cancel", ActionRequest(version = t.version, comment = "trop tard")); fail() } catch (e: HttpException) { assertEquals(409, e.code()) }
 
@@ -112,9 +124,11 @@ class MasterServerContractTest {
             admin.createCategory(CategoryRequest("HYD", "Hydraulique", "HAUTE"))
             assertEquals(4, admin.lines().size); assertEquals(11, admin.machines().size); assertEquals(9, admin.categories().size)
             val nu = admin.createUser(UserCreateRequest("chef.l3", "Chef L3 (fictif)", "CHEF_EQUIPE", "Initial123"))
+            // Rôle de la version 1 envoyé par une ancienne application : compris comme Maintenancier.
+            assertEquals("MAINTENANCIER", admin.createUser(UserCreateRequest("tech.v1", "Tech v1 (fictif)", "TECHNICIEN", "Initial123")).role)
             assertTrue(nu.mustChangePassword)
             admin.updateUser(nu.id, UserUpdateRequest(resetPassword = "Reset2026x"))
-            assertEquals(7, admin.users().size)
+            assertEquals(14, admin.users().size)
 
             val newChef = api(base) { tokens["chef.l3"] }
             tokens["chef.l3"] = newChef.login(LoginRequest("chef.l3", "Reset2026x")).accessToken

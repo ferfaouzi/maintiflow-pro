@@ -323,7 +323,7 @@ class Part(r: Row) {
     val addedAt = r.long("added_at")
 }
 
-class PartRequest(r: Row) {
+class PartDemand(r: Row) {
     val id = r.long("id")
     val reference = r.str("reference")
     val designation = r.strOrNull("designation")
@@ -388,11 +388,11 @@ class IvFull(val iv: Iv, private val sql: Sql) {
             "FROM intervention_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.intervention_id=? ORDER BY e.id", iv.id,
     ).map { Event(it) }
     val parts: List<Part> = sql.query("SELECT * FROM parts_used WHERE intervention_id=? ORDER BY id", iv.id).map { Part(it) }
-    val partRequests: List<PartRequest> = sql.query(
+    val partRequests: List<PartDemand> = sql.query(
         "SELECT p.*, a.full_name AS requested_by_name, b.full_name AS handled_by_name FROM part_requests p " +
             "JOIN users a ON a.id = p.requested_by_id LEFT JOIN users b ON b.id = p.handled_by_id " +
             "WHERE p.intervention_id=? ORDER BY p.id", iv.id,
-    ).map { PartRequest(it) }
+    ).map { PartDemand(it) }
     val signatures: List<Signature> = sql.query(
         "SELECT s.*, u.full_name AS user_name, u.username AS user_matricule FROM signatures s JOIN users u ON u.id = s.user_id " +
             "WHERE s.intervention_id=? ORDER BY s.id", iv.id,

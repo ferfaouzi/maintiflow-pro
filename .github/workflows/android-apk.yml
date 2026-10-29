@@ -32,7 +32,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon --stacktrace :server:test testDebugUnitTest assembleDebug 2>&1 | tee ../build.log
+          ./gradlew --no-daemon --stacktrace :server:test :server-pc:test :server-pc:fatJar testDebugUnitTest assembleDebug 2>&1 | tee ../build.log
       - name: Rapport d'erreur (issue)
         if: failure()
         env:
@@ -49,11 +49,17 @@ jobs:
         with:
           name: maintiflow-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maintiflow-serveur-pc
+          path: android/server-pc/build/libs/maintiflow-server.jar
       - name: Publier l'APK dans une release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="apk-${GITHUB_RUN_NUMBER}"
           cp android/app/build/outputs/apk/debug/app-debug.apk MaintiFlowPro-debug.apk
-          gh release create "$TAG" MaintiFlowPro-debug.apk --title "APK de test ${TAG}" \
-            --notes "APK debug compilé automatiquement (données de démo fictives). Non signé pour la publication." --prerelease
+          mkdir -p serveur-pc && cp android/server-pc/build/libs/maintiflow-server.jar deploy/pc/* serveur-pc/
+          (cd serveur-pc && zip -q ../MaintiFlow-serveur-PC.zip *)
+          gh release create "$TAG" MaintiFlowPro-debug.apk MaintiFlow-serveur-PC.zip --title "APK de test ${TAG}" \
+            --notes "APK debug et serveur PC compilés automatiquement (données de démo fictives). Non signé pour la publication." --prerelease
